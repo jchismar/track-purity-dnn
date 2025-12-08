@@ -21,6 +21,8 @@ from analysis.pca import pca_analysis
 from analysis.robustness import robustness_testing
 from analysis.shap_analysis import shap_analysis
 
+FEATURE_NAMES = get_feature_names()
+
 def load_config(config_path='../config.yaml'):
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
@@ -33,7 +35,7 @@ def setup_model_and_data(config):
     
     logging.info("Initializing the model")
     model = TrackPurityDNN(
-        input_dim=model_config['input_dim'],
+        input_dim=len(FEATURE_NAMES),
         hidden_dims=model_config['hidden_dims'],
         residual_dim=model_config['residual_dim'],
         dropout=model_config['dropout'],
@@ -66,23 +68,25 @@ def setup_model_and_data(config):
         train_dataset,
         batch_size=training_config['batch_size'],
         shuffle=True,
-        num_workers=16,
-        persistent_workers=False,
+        num_workers=training_config.get('num_workers', 4),
+        persistent_workers=True,
         pin_memory=True,
-        drop_last=True
+        prefetch_factor=2
     )
     val_loader = DataLoader(
         val_dataset, 
         batch_size=training_config['batch_size'], 
         shuffle=False, 
-        num_workers=16,
-        pin_memory=True
+        num_workers=training_config.get('num_workers', 4),
+        persistent_workers=True,
+        pin_memory=True,
+        prefetch_factor=2
     )
     test_loader = DataLoader(
         test_dataset, 
         batch_size=training_config['batch_size'], 
         shuffle=False, 
-        num_workers=16,
+        num_workers=training_config.get('num_workers', 4),
         pin_memory=True
     )
     
@@ -147,7 +151,7 @@ def train(config_path='config.yaml', checkpoint_path=None):
     )
 
     trainer.logger.log_hyperparams({
-        'input_dim': model_config['input_dim'],
+        'input_dim': len(FEATURE_NAMES),
         'hidden_dims': model_config['hidden_dims'],
         'dropout': model_config['dropout'],
         'learning_rate': training_config['learning_rate'],
@@ -167,7 +171,6 @@ def train(config_path='config.yaml', checkpoint_path=None):
     trainer.fit(lightning_model, train_loader, val_loader)
     
     return trainer.checkpoint_callback.best_model_path
-
 
 def analyze(config_path='config.yaml', checkpoint_path=None):
     logging.info("Starting analysis")
@@ -197,6 +200,7 @@ def analyze(config_path='config.yaml', checkpoint_path=None):
         model=model,
         learning_rate=training_config['learning_rate'],
         scheduler_config=training_config.get('scheduler'),
+        loss_fn=training_config.get('loss_fn'),
         pos_weight=pos_weight
     )
     best_model.eval()
@@ -228,8 +232,6 @@ def analyze(config_path='config.yaml', checkpoint_path=None):
     y_true = np.concatenate(all_labels).flatten()
     X_test = np.concatenate(all_features)
     
-    feature_names = get_feature_names()
-
     logging.info("Starting performance analysis")
     target_recall = analysis_config.get('target_recall', 0.999)
     metrics, threshold = compute_metrics(y_true, y_pred_logits, results_dir, threshold=None, target_recall=target_recall)
@@ -240,7 +242,7 @@ def analyze(config_path='config.yaml', checkpoint_path=None):
     plot_prediction_distribution(y_true, y_pred_logits, results_dir, threshold=threshold, target_recall=target_recall)
     plot_calibration(y_true, y_pred_logits, results_dir)
     
-    correlation_heatmap(X_test, y_true, feature_names, results_dir, top_n=analysis_config.get('correlation_top_n', 10))
+    correlation_heatmap(X_test, y_true, FEATURE_NAMES, results_dir, top_n=analysis_config.get('correlation_top_n', 10))
     pca_analysis(X_test, results_dir, n_components=10)
     
     class ModelWrapper:
@@ -264,7 +266,7 @@ def analyze(config_path='config.yaml', checkpoint_path=None):
                         n_samples=analysis_config.get('robustness_n_samples', 5000), 
                         batch_size=analysis_config.get('robustness_batch_size', 32768))
     
-    shap_analysis(model_wrapper, X_test, feature_names, results_dir, 
+    shap_analysis(model_wrapper, X_test, FEATURE_NAMES, results_dir, 
                     max_samples=analysis_config.get('shap_max_samples', 1000), 
                     batch_size=analysis_config.get('shap_batch_size', 32768))
 

@@ -1,7 +1,34 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from torch.utils.data import Subset
+from torch.optim import LBFGS
+
+def get_feature_names():
+    return [
+        "trk_pt", 
+        "trk_inner_px", "trk_inner_py", "trk_inner_pz", "trk_inner_pt",
+        "trk_outer_px", "trk_outer_py", "trk_outer_pz", "trk_outer_pt",
+        "trk_ptErr",
+        "trk_dxyClosestPV", "trk_dzClosestPV", "trk_dxy", "trk_dz", "trk_dxyErr", "trk_dzErr",
+        "trk_nChi2", 
+        "trk_eta", "trk_phi", "trk_etaErr", "trk_phiErr",
+        "trk_ndof",
+        "trk_nInnerLost", "trk_nOuterLost", "trk_nInnerInactive", "trk_nOuterInactive", "trk_nLostLay",
+        'trk_nValid', 'trk_nLost', 'trk_nInactive', 'trk_nPixel', 'trk_nStrip', 
+        # 'trk_px', 'trk_py', 'trk_pz', 'trk_pt', 
+        # 'trk_inner_px', 'trk_inner_py', 'trk_inner_pz', 'trk_inner_pt', 
+        # 'trk_outer_px', 'trk_outer_py', 'trk_outer_pz', 'trk_outer_pt',
+        # 'trk_eta', 'trk_lambda', 'trk_cotTheta', 'trk_phi', 
+        # 'trk_dxy', 'trk_dz', 'trk_dxyPV', 'trk_dzPV', 'trk_dxyClosestPV', 'trk_dzClosestPV',
+        # 'trk_ptErr', 'trk_etaErr', 'trk_lambdaErr', 'trk_phiErr', 'trk_dxyErr', 'trk_dzErr',
+        # 'trk_refpoint_x', 'trk_refpoint_y', 'trk_refpoint_z',
+        # 'trk_nChi2', 'trk_nChi2_1Dmod', 'trk_ndof', 'trk_q', 
+        # 'trk_nValid', 'trk_nLost', 'trk_nInactive', 'trk_nPixel', 'trk_nStrip', 
+        # 'trk_nOuterLost', 'trk_nInnerLost', 'trk_nOuterInactive', 'trk_nInnerInactive',
+        # 'trk_nPixelLay', 'trk_nStripLay', 'trk_n3DLay', 'trk_nLostLay', 'trk_nCluster'
+    ]
 
 class MinMaxScaler:
     def __init__(self, data, feature_min=None, feature_max=None):
@@ -21,11 +48,11 @@ class MinMaxScaler:
     def __call__(self, sample):
         data, label = sample
         return self.transform(data), label
-
+        
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
-        super(FocalLoss, self).__init__()
-        self.alpha = alpha
+    def __init__(self, pos_weight, gamma=2.0, reduction='mean'):
+        super().__init__()
+        self.alpha = pos_weight / (1 + pos_weight)
         self.gamma = gamma
         self.reduction = reduction
         self.bce_loss = nn.BCEWithLogitsLoss(reduction='none')
@@ -34,7 +61,8 @@ class FocalLoss(nn.Module):
         bce_loss = self.bce_loss(inputs, targets)
         probas = torch.sigmoid(inputs)
         pt = torch.where(targets == 1, probas, 1 - probas)
-        focal_factor = self.alpha * (1 - pt) ** self.gamma
+        alpha_t = torch.where(targets == 1, self.alpha, 1 - self.alpha)
+        focal_factor = alpha_t * (1 - pt) ** self.gamma
         loss = focal_factor * bce_loss
 
         if self.reduction == 'mean':
@@ -88,18 +116,3 @@ def stratified_split(dataset, train_fraction, val_fraction, test_fraction, rando
     return (Subset(dataset, train_indices), 
             Subset(dataset, val_indices), 
             Subset(dataset, test_indices))
-
-def get_feature_names():
-    return [
-        'trk_px', 'trk_py', 'trk_pz', 'trk_pt', 
-        'trk_inner_px', 'trk_inner_py', 'trk_inner_pz', 'trk_inner_pt', 
-        'trk_outer_px', 'trk_outer_py', 'trk_outer_pz', 'trk_outer_pt',
-        'trk_eta', 'trk_lambda', 'trk_cotTheta', 'trk_phi', 
-        'trk_dxy', 'trk_dz', 'trk_dxyPV', 'trk_dzPV', 'trk_dxyClosestPV', 'trk_dzClosestPV',
-        'trk_ptErr', 'trk_etaErr', 'trk_lambdaErr', 'trk_phiErr', 'trk_dxyErr', 'trk_dzErr',
-        'trk_refpoint_x', 'trk_refpoint_y', 'trk_refpoint_z',
-        'trk_nChi2', 'trk_nChi2_1Dmod', 'trk_ndof', 'trk_q', 
-        'trk_nValid', 'trk_nLost', 'trk_nInactive', 'trk_nPixel', 'trk_nStrip', 
-        'trk_nOuterLost', 'trk_nInnerLost', 'trk_nOuterInactive', 'trk_nInnerInactive',
-        'trk_nPixelLay', 'trk_nStripLay', 'trk_n3DLay', 'trk_nLostLay', 'trk_nCluster'
-    ]

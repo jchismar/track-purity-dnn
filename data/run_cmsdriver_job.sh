@@ -25,7 +25,7 @@ echo "=================================================="
 CURRENT_DIR=$PWD
 
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-CMSSW_VERSION=CMSSW_16_0_X_2025-11-13-1100
+CMSSW_VERSION=CMSSW_16_0_0_pre3
 
 cd /ceph/users/aaarora/${CMSSW_VERSION}/src/
 cmsenv

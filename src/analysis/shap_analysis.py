@@ -5,7 +5,6 @@ import shap
 import pandas as pd
 from pathlib import Path
 
-
 def shap_analysis(model, X, feature_names, output_dir, max_samples=1000, batch_size=32768):
     logging.info(f"\nComputing SHAP values (up to {max_samples} samples)...")
 

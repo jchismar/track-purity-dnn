@@ -59,8 +59,8 @@ def main():
         
         print(f"  Found {len(files)} files")
         
-        if len(files) > 100:
-            files = files[:100]
+        if len(files) > 1000:
+            files = files[:1000]
             print(f"  Limiting to {len(files)} files")
         
         file_list_path = output_dir / f"{dataset_name}_files.txt"

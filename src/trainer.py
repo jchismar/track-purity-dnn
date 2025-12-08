@@ -3,7 +3,7 @@ import torch.nn as nn
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
-from torch.optim import Adam
+from torch.optim import AdamW
 from torch.optim.lr_scheduler import MultiStepLR
 from utils import FocalLoss
 from torch.optim.lr_scheduler import LinearLR, MultiStepLR, ChainedScheduler
@@ -47,10 +47,11 @@ def create_trainer(training_config, callback_config, logger_config, trainer_conf
 
 
 class LightningModel(pl.LightningModule):
-    def __init__(self, model, learning_rate=1e-3, loss_fn=None, scheduler_config=None, pos_weight=None):
+    def __init__(self, model, learning_rate=1e-3, loss_fn=None, scheduler_config=None, weight_decay=0.01, pos_weight=None):
         super().__init__()
         self.model = model
         self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
         
         if loss_fn is not None and loss_fn == "BCEWithLogitsLoss":
             if pos_weight is not None:
@@ -59,11 +60,10 @@ class LightningModel(pl.LightningModule):
             else:
                 self.loss_fn = nn.BCEWithLogitsLoss()
         if loss_fn is not None and loss_fn == "FocalLoss":
-            self.loss_fn = FocalLoss(alpha=(pos_weight / (1 + pos_weight)), gamma=2.0, reduction="mean")
+            self.loss_fn = FocalLoss(pos_weight, gamma=2.0, reduction="mean")
         
         if loss_fn is None:
             self.loss_fn = nn.BCEWithLogitsLoss()
-
             
         self.scheduler_config = scheduler_config
         
@@ -113,7 +113,7 @@ class LightningModel(pl.LightningModule):
         return loss
     
     def configure_optimizers(self):
-        optimizer = Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
         
         if self.scheduler_config is None:
             return optimizer

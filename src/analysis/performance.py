@@ -193,10 +193,11 @@ def plot_confusion_matrix(y_true, y_pred_logits, output_dir, threshold=None, tar
     y_pred_binary = (y_pred_proba >= threshold).astype(int)
     
     cm = confusion_matrix(y_true, y_pred_binary)
+    cm_normalized = cm.astype('float') / cm.sum(axis=1, keepdims=True)
     
     fig, ax = plt.subplots(figsize=(10, 8))
     
-    im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    im = ax.imshow(cm_normalized, interpolation='nearest', cmap=plt.cm.Blues)
     ax.figure.colorbar(im, ax=ax)
     
     classes = ['Fake Track (0)', 'Real Track (1)']
@@ -208,15 +209,15 @@ def plot_confusion_matrix(y_true, y_pred_logits, output_dir, threshold=None, tar
     
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
     
-    thresh = cm.max() / 2.
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            ax.text(j, i, format(cm[i, j], 'd'),
+    thresh = cm_normalized.max() / 2.
+    for i in range(cm_normalized.shape[0]):
+        for j in range(cm_normalized.shape[1]):
+            ax.text(j, i, f"{cm_normalized[i, j]:.2f}",
                    ha="center", va="center",
-                   color="white" if cm[i, j] > thresh else "black",
+                   color="white" if cm_normalized[i, j] > thresh else "black",
                    fontsize=16)
     
-    ax.set_title(f'Confusion Matrix (Threshold = {threshold:.6f}, Target {target_recall*100:.1f}% Recall)', 
+    ax.set_title(f'Normalized Confusion Matrix (Threshold = {threshold:.6f}, Target {target_recall*100:.1f}% Recall)', 
                  fontsize=14, fontweight='bold')
     
     plt.tight_layout()

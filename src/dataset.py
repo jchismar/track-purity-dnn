@@ -35,7 +35,7 @@ def process_root_file(file_path):
 
 class TrackDataset(Dataset):
     def __init__(self, input_files, transform=None, data_dir=None, **kwargs):
-        self.input_files_pattern = input_files  # Store the pattern
+        self.input_files_pattern = input_files
         self.transform_obj = transform
 
         self._data = None
