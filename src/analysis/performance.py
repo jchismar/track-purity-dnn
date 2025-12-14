@@ -101,21 +101,25 @@ def plot_roc_curve(y_true, y_pred_logits, output_dir, highlight_threshold=None, 
     
     fig, ax = plt.subplots(figsize=(10, 8))
     
-    ax.plot(fpr, tpr, color='darkorange', lw=2, 
+    ax.plot(fpr, 1 - tpr, color='darkorange', lw=2, 
             label=f'ROC curve (AUC = {roc_auc:.4f})')
-    ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', 
+    
+    fpr_random = np.linspace(0.001, 1, 100)  # Avoid log(0)
+    fnr_random = 1 - fpr_random
+    ax.plot(fpr_random, fnr_random, color='navy', lw=2, linestyle='--', 
             label='Random Classifier')
     
-    ax.plot(fpr[threshold_idx], tpr[threshold_idx], 'ro', markersize=12,
+    ax.plot(fpr[threshold_idx], 1 - tpr[threshold_idx], 'ro', markersize=12,
             label=f'Target {target_recall*100:.1f}% TPR (Threshold = {highlight_threshold:.4f})')
     
-    ax.plot(fpr[optimal_idx], tpr[optimal_idx], 'gs', markersize=10,
+    ax.plot(fpr[optimal_idx], 1 - tpr[optimal_idx], 'gs', markersize=10,
             label=f'Youden Optimal (Threshold = {optimal_threshold:.4f})', alpha=0.6)
     
     ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])
+    # ax.set_ylim([0.0, 1.05])
+    ax.set_yscale('log')
     ax.set_xlabel('False Positive Rate', fontsize=12)
-    ax.set_ylabel('True Positive Rate (Recall)', fontsize=12)
+    ax.set_ylabel('log(1 - True Positive Rate)', fontsize=12)
     ax.set_title('Receiver Operating Characteristic (ROC) Curve', 
                  fontsize=14, fontweight='bold')
     ax.legend(loc="lower right", fontsize=9)

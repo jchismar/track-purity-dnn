@@ -29,8 +29,8 @@ training:
   num_workers: 4
 
   scheduler:
-    milestones: [5, 10, 15]
-    gamma: 0.5
+    milestones: [35, 40, 45]
+    gamma: 0.8
     monitor: val_loss
     interval: epoch
     frequency: 1
@@ -51,10 +51,10 @@ logger:
   save_dir: output/
 
 analysis:
-  target_recall: 0.99
+  target_recall: 0.995
   correlation_top_n: 5
   robustness_noise_levels: [0.01, 0.05, 0.1]
-  robustness_n_samples: 100
+  robustness_n_samples: 1000
   robustness_batch_size: 16384
-  shap_max_samples: 100
+  shap_max_samples: 10000
   shap_batch_size: 16384

@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from model import TrackPurityDNN
 from dataset import TrackDataset
 from trainer import LightningModel, create_trainer
-from utils import MinMaxScaler, stratified_split, get_feature_names
+from utils import MinMaxScaler, stratified_split, get_feature_names, save_jit_inference_model
 from analysis.performance import (
     compute_metrics, plot_roc_curve, plot_precision_recall_curve,
     plot_confusion_matrix, plot_prediction_distribution,
@@ -33,6 +33,15 @@ def setup_model_and_data(config):
     data_config = config['data']
     training_config = config['training']
     
+    logging.info("Preparing the dataset")
+    dataset = TrackDataset(
+        data_config['input_files'],
+        transform=MinMaxScaler,
+        data_dir=data_config.get('data_dir', None),
+    )
+
+    stats = dataset.get_dataset_statistics()
+    
     logging.info("Initializing the model")
     model = TrackPurityDNN(
         input_dim=len(FEATURE_NAMES),
@@ -40,13 +49,6 @@ def setup_model_and_data(config):
         residual_dim=model_config['residual_dim'],
         dropout=model_config['dropout'],
         n_res_blocks=model_config['n_res_blocks']
-    )
-    
-    logging.info("Preparing the dataset")
-    dataset = TrackDataset(
-        data_config['input_files'], 
-        transform=MinMaxScaler,
-        data_dir=data_config.get('data_dir', None),
     )
 
     total_size = len(dataset)
@@ -89,8 +91,6 @@ def setup_model_and_data(config):
         num_workers=training_config.get('num_workers', 4),
         pin_memory=True
     )
-    
-    stats = dataset.get_dataset_statistics()
     
     return {
         'model': model,
@@ -242,9 +242,6 @@ def analyze(config_path='config.yaml', checkpoint_path=None):
     plot_prediction_distribution(y_true, y_pred_logits, results_dir, threshold=threshold, target_recall=target_recall)
     plot_calibration(y_true, y_pred_logits, results_dir)
     
-    correlation_heatmap(X_test, y_true, FEATURE_NAMES, results_dir, top_n=analysis_config.get('correlation_top_n', 10))
-    pca_analysis(X_test, results_dir, n_components=10)
-    
     class ModelWrapper:
         def __init__(self, lightning_model):
             self.model = lightning_model
@@ -269,7 +266,12 @@ def analyze(config_path='config.yaml', checkpoint_path=None):
     shap_analysis(model_wrapper, X_test, FEATURE_NAMES, results_dir, 
                     max_samples=analysis_config.get('shap_max_samples', 1000), 
                     batch_size=analysis_config.get('shap_batch_size', 32768))
+    
+    best_model.to('cpu')
+    jit_inference_path = Path(checkpoint_path).parent.parent / "best_model_inference_jit.pt"
+    save_jit_inference_model(best_model.model, feature_min=stats['feature_min'], feature_max=stats['feature_max'], save_path=jit_inference_path, input_dim=len(FEATURE_NAMES))
 
+    logging.info(f"Saved JIT inference model (with built-in normalization) to {jit_inference_path}")
     logging.info("Done!")
 
 if __name__ == '__main__':    

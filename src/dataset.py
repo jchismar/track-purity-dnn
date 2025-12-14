@@ -90,7 +90,8 @@ class TrackDataset(Dataset):
         
     def _generate_data_key(self, file_list):
         file_info = '|'.join([f"{f}:{os.path.getmtime(f)}" for f in file_list if os.path.exists(f)])
-        hash_key = hashlib.md5(file_info.encode()).hexdigest()[:16]
+        feature_info = '|'.join(TRACK_FEATURES)
+        hash_key = hashlib.md5((file_info + feature_info).encode()).hexdigest()[:16]
         logging.info(f"Generated data key: {hash_key}")
         return hash_key
     

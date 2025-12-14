@@ -16,7 +16,7 @@ def get_feature_names():
         "trk_eta", "trk_phi", "trk_etaErr", "trk_phiErr",
         "trk_ndof",
         "trk_nInnerLost", "trk_nOuterLost", "trk_nInnerInactive", "trk_nOuterInactive", "trk_nLostLay",
-        'trk_nValid', 'trk_nLost', 'trk_nInactive', 'trk_nPixel', 'trk_nStrip', 
+        "trk_nPixel", "trk_nStrip", 
         # 'trk_px', 'trk_py', 'trk_pz', 'trk_pt', 
         # 'trk_inner_px', 'trk_inner_py', 'trk_inner_pz', 'trk_inner_pt', 
         # 'trk_outer_px', 'trk_outer_py', 'trk_outer_pz', 'trk_outer_pt',
@@ -116,3 +116,34 @@ def stratified_split(dataset, train_fraction, val_fraction, test_fraction, rando
     return (Subset(dataset, train_indices), 
             Subset(dataset, val_indices), 
             Subset(dataset, test_indices))
+
+def save_jit_inference_model(model, feature_min, feature_max, save_path, input_dim):
+    class ModelWrapper(nn.Module):
+        def __init__(self, model, feature_min=None, feature_max=None):
+            super(ModelWrapper, self).__init__()
+            self.model = model
+            if feature_min is not None:
+                self.register_buffer('feature_min', feature_min.float())
+            else:
+                self.register_buffer('feature_min', torch.zeros(input_dim))
+            
+            if feature_max is not None:
+                self.register_buffer('feature_max', feature_max.float())
+            else:
+                self.register_buffer('feature_max', torch.ones(input_dim))
+
+        def normalize(self, x):
+            return (x - self.feature_min) / (self.feature_max - self.feature_min + 1e-8)
+        
+        def set_normalization_params(self, feature_min, feature_max):
+            self.feature_min = feature_min.float().to(self.feature_min.device)
+            self.feature_max = feature_max.float().to(self.feature_max.device)
+        
+        def forward(self, x):
+            x = self.normalize(x)
+            return torch.sigmoid(self.model(x))
+        
+    model.eval()
+    sample_input = torch.randn(1, input_dim)
+    traced_model = torch.jit.trace(ModelWrapper(model, feature_min, feature_max), sample_input)
+    torch.jit.save(traced_model, save_path)
