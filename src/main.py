@@ -220,7 +220,7 @@ def analyze(config_path='config.yaml', checkpoint_path=None):
     
     with torch.no_grad():
         for batch in test_loader:
-            x, y = batch
+            x, y, w = batch
             x = x.to(device)
             y_pred = best_model(x)
             

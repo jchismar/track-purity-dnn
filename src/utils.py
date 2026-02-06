@@ -7,16 +7,16 @@ from torch.optim import LBFGS
 
 def get_feature_names():
     return [
-        "trk_pt", 
-        "trk_inner_px", "trk_inner_py", "trk_inner_pz", "trk_inner_pt",
-        "trk_outer_px", "trk_outer_py", "trk_outer_pz", "trk_outer_pt",
-        "trk_ptErr",
-        "trk_dxyClosestPV", "trk_dzClosestPV", "trk_dxy", "trk_dz", "trk_dxyErr", "trk_dzErr",
-        "trk_nChi2", 
-        "trk_eta", "trk_phi", "trk_etaErr", "trk_phiErr",
-        "trk_ndof",
-        "trk_nInnerLost", "trk_nOuterLost", "trk_nInnerInactive", "trk_nOuterInactive", "trk_nLostLay",
-        "trk_nPixel", "trk_nStrip", 
+        # "trk_pt", 
+        # "trk_inner_px", "trk_inner_py", "trk_inner_pz", "trk_inner_pt",
+        # "trk_outer_px", "trk_outer_py", "trk_outer_pz", "trk_outer_pt",
+        # "trk_ptErr",
+        # "trk_dxyClosestPV", "trk_dzClosestPV", "trk_dxy", "trk_dz", "trk_dxyErr", "trk_dzErr",
+        # "trk_nChi2", 
+        # "trk_eta", "trk_phi", "trk_etaErr", "trk_phiErr",
+        # "trk_ndof",
+        # "trk_nInnerLost", "trk_nOuterLost", "trk_nInnerInactive", "trk_nOuterInactive", "trk_nLostLay",
+        # "trk_nPixel", "trk_nStrip", 
         # 'trk_px', 'trk_py', 'trk_pz', 'trk_pt', 
         # 'trk_inner_px', 'trk_inner_py', 'trk_inner_pz', 'trk_inner_pt', 
         # 'trk_outer_px', 'trk_outer_py', 'trk_outer_pz', 'trk_outer_pt',
@@ -28,6 +28,15 @@ def get_feature_names():
         # 'trk_nValid', 'trk_nLost', 'trk_nInactive', 'trk_nPixel', 'trk_nStrip', 
         # 'trk_nOuterLost', 'trk_nInnerLost', 'trk_nOuterInactive', 'trk_nInnerInactive',
         # 'trk_nPixelLay', 'trk_nStripLay', 'trk_n3DLay', 'trk_nLostLay', 'trk_nCluster'
+        # "trk_pt", 
+        # "trk_inner_px", "trk_inner_py", "trk_inner_pz", "trk_inner_pt",
+        # "trk_outer_px", "trk_outer_py", "trk_outer_pz", "trk_outer_pt",
+        "trk_dxy", "trk_dz", "trk_dzErr",
+        "trk_nChi2", 
+        "trk_eta", "trk_phi", "trk_etaErr", "trk_phiErr",
+        "trk_ndof",
+        "trk_nInnerLost", "trk_nOuterLost", "trk_nLostLay",
+        "trk_nPixel", "trk_nStrip", 
     ]
 
 class MinMaxScaler:
@@ -46,8 +55,8 @@ class MinMaxScaler:
         return data * (self.max - self.min + 1e-8) + self.min
     
     def __call__(self, sample):
-        data, label = sample
-        return self.transform(data), label
+        data, label, weight = sample
+        return self.transform(data), label, weight
         
 class FocalLoss(nn.Module):
     def __init__(self, pos_weight, gamma=2.0, reduction='mean'):

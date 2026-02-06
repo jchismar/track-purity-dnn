@@ -20,6 +20,11 @@ from utils import get_feature_names
 
 TRACK_FEATURES = get_feature_names()
 
+def calc_sample_weights(disp_feature, weight_factor=5.0):
+    weights = ak.ones_like(disp_feature, dtype=float)
+    weights = ak.where(abs(disp_feature) > 0.01, weight_factor, weights)
+    return weights
+
 def process_root_file(file_path):
     try:
         with uproot.open(file_path + ":trackingNtuple/tree") as tree:
@@ -27,11 +32,12 @@ def process_root_file(file_path):
             
             features = {col: arrays[col] for col in TRACK_FEATURES}
             labels = ak.fill_none(ak.firsts(ak.flatten(arrays["trk_simTrkIdx"], axis=1)), -1) != -1
+            weights = calc_sample_weights(ak.flatten(arrays["trk_dxy"], axis=1), weight_factor=6.0)
             
-            return features, labels
+            return features, labels, weights
     except Exception as e:
         print(f"Error processing {file_path}: {e}")
-        return None, None
+        return None, None, None
 
 class TrackDataset(Dataset):
     def __init__(self, input_files, transform=None, data_dir=None, **kwargs):
@@ -40,6 +46,7 @@ class TrackDataset(Dataset):
 
         self._data = None
         self._labels = None
+        self._weights = None
         self._metadata = None
         
         if data_dir is None:
@@ -64,6 +71,7 @@ class TrackDataset(Dataset):
 
         self.data_file = self.data_prefix.with_suffix('.data.pt')
         self.labels_file = self.data_prefix.with_suffix('.labels.pt')
+        self.weights_file = self.data_prefix.with_suffix('.weights.pt')
         self.metadata_file = self.data_prefix.with_suffix('.meta.json')
 
         if self.data_file.exists() and self.labels_file.exists() and self.metadata_file.exists():
@@ -105,12 +113,15 @@ class TrackDataset(Dataset):
             logging.info(f"Loading data from {self.data_file} and {self.labels_file}")
             self._data = torch.load(self.data_file, weights_only=False)
             self._labels = torch.load(self.labels_file, weights_only=False)
-            logging.info(f"Loaded data from {self.data_file} and {self.labels_file}")
+            self._weights = torch.load(self.weights_file, weights_only=False)
+            assert len(self._weights) == len(self._labels)
+            logging.info(f"Loaded data from {self.data_file} and {self.labels_file} and {self.weights_file}")
     
     def _create_data(self, file_list):
         logging.info(f"Processing ROOT files in parallel using {cpu_count() // 4} workers...")
         all_data_chunks = []
         all_labels_chunks = []
+        all_weights_chunks = []
         
         n_real = 0
         n_fake = 0
@@ -119,7 +130,7 @@ class TrackDataset(Dataset):
         feature_max = None
         
         with Pool(processes=cpu_count()//4) as pool:
-            for features, labels in tqdm(pool.imap_unordered(process_root_file, file_list), 
+            for features, labels, weights in tqdm(pool.imap_unordered(process_root_file, file_list), 
                                         total=len(file_list), desc="Processing ROOT files"):
                 if features is None:
                     continue
@@ -129,6 +140,7 @@ class TrackDataset(Dataset):
                     for col in TRACK_FEATURES
                 ]).astype('float32')
                 labels_numpy = labels.to_numpy().astype('float32')
+                weights_numpy = weights.to_numpy().astype('float32')
                 
                 if len(data_numpy) == 0:
                     continue
@@ -145,6 +157,7 @@ class TrackDataset(Dataset):
                 
                 all_data_chunks.append(data_numpy)
                 all_labels_chunks.append(labels_numpy)
+                all_weights_chunks.append(weights_numpy)
         
         if not all_data_chunks:
             raise ValueError("No valid data found in any file!")
@@ -152,16 +165,19 @@ class TrackDataset(Dataset):
         logging.info("Concatenating data...")
         data = np.concatenate(all_data_chunks, axis=0)
         labels = np.concatenate(all_labels_chunks, axis=0)
+        weights = np.concatenate(all_weights_chunks, axis=0)
         total_samples = len(data)
         
         logging.info(f"Total samples: {total_samples:,} ({n_real:,} real, {n_fake:,} fake)")
         
         data_tensor = torch.from_numpy(data).float()
         labels_tensor = torch.from_numpy(labels).float()
+        weights_tensor = torch.from_numpy(weights).float()
         
         torch.save(data_tensor, self.data_file)
         torch.save(labels_tensor, self.labels_file)
-        logging.info(f"Saved data to {self.data_file} and {self.labels_file}")
+        torch.save(weights_tensor, self.weights_file)
+        logging.info(f"Saved data to {self.data_file} and {self.labels_file} and {self.weights_file}")
         
         metadata = {
             'total_samples': int(total_samples),
@@ -197,8 +213,9 @@ class TrackDataset(Dataset):
     def __getitem__(self, idx):
         data = self._data[idx]
         label = self._labels[idx].unsqueeze(0)
+        weight = self._weights[idx].unsqueeze(0)
         
-        sample = (data, label)
+        sample = (data, label, weight)
         if self.transform_obj:
             sample = self.transform_obj(sample)
         return sample
@@ -208,3 +225,5 @@ class TrackDataset(Dataset):
             del self._data
         if self._labels is not None:
             del self._labels
+        if self._weights is not None:
+            del self._weights

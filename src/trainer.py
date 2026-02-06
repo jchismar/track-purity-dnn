@@ -56,9 +56,9 @@ class LightningModel(pl.LightningModule):
         if loss_fn is not None and loss_fn == "BCEWithLogitsLoss":
             if pos_weight is not None:
                 pos_weight_tensor = torch.tensor([pos_weight], dtype=torch.float32)
-                self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor)
+                self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor, reduction="none")
             else:
-                self.loss_fn = nn.BCEWithLogitsLoss()
+                self.loss_fn = nn.BCEWithLogitsLoss(reduction="none")
         if loss_fn is not None and loss_fn == "FocalLoss":
             self.loss_fn = FocalLoss(pos_weight, gamma=2.0, reduction="mean")
         
@@ -73,10 +73,10 @@ class LightningModel(pl.LightningModule):
         return self.model(x)
     
     def training_step(self, batch, batch_idx):
-        x, y = batch
+        x, y, w = batch
         y_hat = self(x)
         loss = self.loss_fn(y_hat, y)
-        
+        loss = (loss * w).mean()
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
         
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
@@ -95,18 +95,20 @@ class LightningModel(pl.LightningModule):
         self.log('grad_norm', total_norm, on_step=True, on_epoch=False, prog_bar=False, sync_dist=True)
     
     def validation_step(self, batch, batch_idx):
-        x, y = batch
+        x, y, w = batch
         y_hat = self(x)
         loss = self.loss_fn(y_hat, y)
+        loss = (loss * w).mean()
         
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         
         return loss
     
     def test_step(self, batch, batch_idx):
-        x, y = batch
+        x, y, w = batch
         y_hat = self(x)
         loss = self.loss_fn(y_hat, y)
+        loss = (loss * w).mean()
         
         self.log('test_loss', loss, on_step=False, on_epoch=False, sync_dist=True)
         
