@@ -31,12 +31,13 @@ def get_feature_names():
         # "trk_pt", 
         # "trk_inner_px", "trk_inner_py", "trk_inner_pz", "trk_inner_pt",
         # "trk_outer_px", "trk_outer_py", "trk_outer_pz", "trk_outer_pt",
-        "trk_dxy", "trk_dz", "trk_dzErr",
+        "trk_dxy", "trk_dz", "trk_dxyErr", "trk_dzErr", 
         "trk_nChi2", 
         "trk_eta", "trk_phi", "trk_etaErr", "trk_phiErr",
         "trk_ndof",
         "trk_nInnerLost", "trk_nOuterLost", "trk_nLostLay",
-        "trk_nPixel", "trk_nStrip", 
+        "trk_nPixel", "trk_nStrip",
+        "trk_originalAlgo" 
     ]
 
 class MinMaxScaler:
@@ -55,8 +56,9 @@ class MinMaxScaler:
         return data * (self.max - self.min + 1e-8) + self.min
     
     def __call__(self, sample):
-        data, label, weight = sample
-        return self.transform(data), label, weight
+        # sample is (data, label) or (data, label, weight); only data is scaled
+        data, *rest = sample
+        return (self.transform(data), *rest)
         
 class FocalLoss(nn.Module):
     def __init__(self, pos_weight, gamma=2.0, reduction='mean'):
@@ -156,3 +158,16 @@ def save_jit_inference_model(model, feature_min, feature_max, save_path, input_d
     sample_input = torch.randn(1, input_dim)
     traced_model = torch.jit.trace(ModelWrapper(model, feature_min, feature_max), sample_input)
     torch.jit.save(traced_model, save_path)
+
+class LogZScoreTransform:
+    def __init__(self, data, feature_min=None, feature_max=None):
+        self.mean = (feature_min + feature_max) / 2
+        self.std = torch.std(data, dim=0, unbiased=True)
+    
+    def transform(self, data):
+        data = torch.log(torch.abs(data) + 1e-8) * torch.sign(data)
+        return (data - self.mean()) / (self.std() + 1e-8)
+    
+    def __call__(self, sample):
+        data, label, weight = sample
+        return self.transform(data), label, weight
