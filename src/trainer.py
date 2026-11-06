@@ -60,10 +60,10 @@ class LightningModel(pl.LightningModule):
             else:
                 self.loss_fn = nn.BCEWithLogitsLoss(reduction="none")
         if loss_fn is not None and loss_fn == "FocalLoss":
-            self.loss_fn = FocalLoss(pos_weight, gamma=2.0, reduction="mean")
+            self.loss_fn = FocalLoss(pos_weight, gamma=2.0, reduction="none")
         
         if loss_fn is None:
-            self.loss_fn = nn.BCEWithLogitsLoss()
+            self.loss_fn = nn.BCEWithLogitsLoss(reduction="none")
             
         self.scheduler_config = scheduler_config
         
@@ -71,12 +71,20 @@ class LightningModel(pl.LightningModule):
         
     def forward(self, x):
         return self.model(x)
+
+    def _compute_loss(self, batch):
+        """Batch is (x, y) or (x, y, w). With per-sample weights w the loss is the
+        weighted mean sum(w * loss) / sum(w), so its scale stays comparable to the unweighted one."""
+        x, y, *rest = batch
+        per_sample = self.loss_fn(self(x), y)
+        if rest:
+            w = rest[0]
+            return (per_sample * w).sum() / w.sum()
+        return per_sample.mean()
     
     def training_step(self, batch, batch_idx):
-        x, y, w = batch
-        y_hat = self(x)
-        loss = self.loss_fn(y_hat, y)
-        loss = (loss * w).mean()
+        loss = self._compute_loss(batch)
+        
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
         
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
@@ -95,20 +103,14 @@ class LightningModel(pl.LightningModule):
         self.log('grad_norm', total_norm, on_step=True, on_epoch=False, prog_bar=False, sync_dist=True)
     
     def validation_step(self, batch, batch_idx):
-        x, y, w = batch
-        y_hat = self(x)
-        loss = self.loss_fn(y_hat, y)
-        loss = (loss * w).mean()
+        loss = self._compute_loss(batch)
         
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         
         return loss
     
     def test_step(self, batch, batch_idx):
-        x, y, w = batch
-        y_hat = self(x)
-        loss = self.loss_fn(y_hat, y)
-        loss = (loss * w).mean()
+        loss = self._compute_loss(batch)
         
         self.log('test_loss', loss, on_step=False, on_epoch=False, sync_dist=True)
         

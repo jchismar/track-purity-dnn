@@ -8,7 +8,8 @@ from sklearn.metrics import (
 )
 from scipy.special import expit # Sigmoid function
 from pathlib import Path
-
+import os
+from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 def find_threshold_for_recall(y_true, y_pred_logits, target_recall=0.999):
     y_pred_proba = expit(y_pred_logits)
@@ -327,3 +328,189 @@ def plot_calibration(y_true, y_pred_logits, output_dir, n_bins=20):
     plt.savefig(output_path / 'calibration_plot.png', dpi=300, bbox_inches='tight')
     plt.close()
     logging.info(f"Saved: {output_path / 'calibration_plot.png'}")
+
+def plot_loss(logdir, outdir):
+    event_files = [
+        os.path.join(logdir, f)
+        for f in os.listdir(logdir)
+        if "events.out.tfevents" in f
+    ]
+
+    if len(event_files) == 0:
+        raise RuntimeError(f"No TensorBoard event files found in {logdir}")
+
+    print("Using:")
+    for f in event_files:
+        print("  ", f)
+
+    # Load TensorBoard data
+    ea = EventAccumulator(event_files[0])
+    ea.Reload()
+
+    print("\nAvailable scalar metrics:")
+    print(ea.Tags()["scalars"])
+
+    # Get epoch-level training loss
+    train_events = ea.Scalars("train_loss_epoch")
+
+    # Get validation loss
+    val_events = ea.Scalars("val_loss")
+
+    print("Train:")
+    for event in train_events[:10]:
+        print(event.step, event.value)
+
+    print("Validation:")
+    for event in val_events[:10]:
+        print(event.step, event.value)
+
+    # Extract values
+    train_epochs = range(len(train_events))
+    val_epochs = range(len(val_events))
+    # train_epochs = [event.step for event in train_events]
+    # train_loss = [event.value for event in train_events]
+    train_loss = [event.value for event in train_events]
+
+    # val_epochs = [event.step for event in val_events]
+    val_loss = [event.value for event in val_events]
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(9, 6))
+
+    ax.plot(
+        train_epochs,
+        train_loss,
+        label="Train",
+    )
+
+    ax.plot(
+        val_epochs,
+        val_loss,
+        label="Validation",
+    )
+
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss")
+    ax.set_title("Training and Validation Loss")
+
+    ax.legend()
+    ax.grid(alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(outdir, "loss.png"))
+
+    ax.set_yscale("log")
+    fig.savefig(os.path.join(outdir, "loss_log.png"))
+
+
+# def plot_prediction_distribution_vertex_cut(
+#     y_true,
+#     y_pred_logits,
+#     X_test,
+#     output_dir,
+#     feature_names,
+#     vertex_cut,
+#     threshold=None,
+#     target_recall=0.999,
+# ):
+#     logging.info(
+#         f"\nGenerating prediction distribution plot for dxyClosestPV > {vertex_cut} "
+#     )
+
+#     # Convert logits → probabilities
+#     y_pred_proba = expit(y_pred_logits)
+
+#     # Apply vertex cut
+#     vertex_index = feature_names.index("trk_dxyClosestPV")
+#     vertex_values = X_test[:, vertex_index]
+#     mask = vertex_values > vertex_cut
+
+#     if mask.sum() == 0:
+#         logging.warning("No samples pass the vertex cut — skipping plot.")
+#         return
+
+#     y_true_cut = y_true[mask]
+#     y_pred_proba_cut = y_pred_proba[mask]
+#     y_pred_logits_cut = y_pred_logits[mask]
+
+#     # Determine threshold if not provided
+#     if threshold is None:
+#         threshold, _ = find_threshold_for_recall(
+#             y_true_cut, y_pred_logits_cut, target_recall
+#         )
+
+#     # Separate classes
+#     fake_tracks = y_pred_proba_cut[y_true_cut == 0]
+#     real_tracks = y_pred_proba_cut[y_true_cut == 1]
+
+#     fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+
+#     # --- Top panel: unstacked ---
+#     axes[0].hist(
+#         fake_tracks,
+#         bins=50,
+#         alpha=0.7,
+#         label="Fake Tracks",
+#         color="red",
+#         edgecolor="black",
+#     )
+#     axes[0].hist(
+#         real_tracks,
+#         bins=50,
+#         alpha=0.7,
+#         label="Real Tracks",
+#         color="green",
+#         edgecolor="black",
+#     )
+#     axes[0].axvline(
+#         x=threshold,
+#         color="black",
+#         linestyle="--",
+#         linewidth=2,
+#         label=f"Threshold = {threshold:.4f} ({target_recall*100:.1f}% recall)",
+#     )
+#     axes[0].set_xlabel("Predicted Probability", fontsize=12)
+#     axes[0].set_ylabel("Frequency", fontsize=12)
+#     axes[0].set_title(
+#         f"Distribution of Predicted Probabilities (dxyClosestPV > {vertex_cut})",
+#         fontsize=14,
+#         fontweight="bold",
+#     )
+#     axes[0].legend(fontsize=10)
+#     axes[0].grid(True, alpha=0.3, axis="y")
+
+#     # --- Bottom panel: stacked & normalized ---
+#     axes[1].hist(
+#         [fake_tracks, real_tracks],
+#         bins=50,
+#         alpha=0.7,
+#         label=["Fake Tracks", "Real Tracks"],
+#         color=["red", "green"],
+#         edgecolor="black",
+#         stacked=True,
+#         density=True,
+#     )
+#     axes[1].axvline(
+#         x=threshold,
+#         color="black",
+#         linestyle="--",
+#         linewidth=2,
+#         label=f"Threshold = {threshold:.4f} ({target_recall*100:.1f}% recall)",
+#     )
+#     axes[1].set_xlabel("Predicted Probability", fontsize=12)
+#     axes[1].set_ylabel("Density", fontsize=12)
+#     axes[1].set_title(
+#         f"Stacked Probability Distribution (dxyClosestPV > {vertex_cut}) (Normalized)",
+#         fontsize=14,
+#         fontweight="bold",
+#     )
+#     axes[1].legend(fontsize=10)
+#     axes[1].grid(True, alpha=0.3, axis="y")
+
+#     plt.tight_layout()
+#     output_path = Path(output_dir)
+#     out_file = output_path / f"prediction_distribution_dxyClosestPV_gt_{vertex_cut}.png"
+#     plt.savefig(out_file, dpi=300, bbox_inches="tight")
+#     plt.close()
+
+#     logging.info(f"Saved: {output_path / 'prediction_distribution_vertex_gt_{vertex_cut}.png'}")
