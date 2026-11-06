@@ -1,7 +1,14 @@
 data:
   random_seed: 12345
-  input_files: "/ceph/cms/store/user/aaarora/tracking/*.root"
-  data_dir: "/ceph/cms/store/user/aaarora/tracking/data"
+  input_files: "/ceph/cms/store/user/jachisma/trackingNtuples_offline_17_0_0_pre2/*/*.root"
+  # input_files: "/ceph/cms/store/user/jachisma/trackingNtuples_offline_17_0_0_pre2/TT_TuneCP5_14TeV-powheg-pythia8/*.root"
+  data_dir: "/ceph/cms/store/user/jachisma/trackingNtuples_offline_17_0_0_pre2/data/addPt"
+  # Samples for `python main.py --evaluate` (or pass --evalFiles); optional separate cache dir
+  # eval_input_files: "/path/to/other_sample/*.root"   # or a list:
+  # eval_input_files:
+  #   - "/path/to/sampleA/*.root"
+  #   - "/path/to/sampleB/*.root"
+  # eval_data_dir: "/path/to/eval/cache"
   train_split: 0.6
   val_split: 0.2
   test_split: 0.2
@@ -22,11 +29,19 @@ trainer:
   accumulate_grad_batches: 4  
 
 training:
-  loss_fn: BCEWithLogitsLoss
+  loss_fn: FocalLoss 
   learning_rate: 0.0001
   batch_size: 16384
-  max_epochs: 50
-  num_workers: 4
+  max_epochs: 200
+  num_workers: 3
+
+  # Upweight tracks with pT > pt_min [GeV] OR |dxy| > dxy_min [cm] in the loss by `factor`.
+  # Needs the dataset cache to contain pT/dxy (<data_dir>/dataset_<key>.aux.pt).
+  upweight:
+    enabled: true
+    pt_min: 5.0
+    dxy_min: 0.5
+    factor: 5.0
 
   scheduler:
     milestones: [35, 40, 45]
@@ -48,10 +63,10 @@ callbacks:
     mode: min
 
 logger:
-  save_dir: output/
+  save_dir: output_offline_lstMkfit_iters01/
 
 analysis:
-  target_recall: 0.995
+  target_recall: 0.99
   correlation_top_n: 5
   robustness_noise_levels: [0.01, 0.05, 0.1]
   robustness_n_samples: 1000
