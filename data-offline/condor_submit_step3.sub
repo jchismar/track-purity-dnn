@@ -1,0 +1,25 @@
+##################################################################
+# HTCondor submit file for running cmsDriver on multiple files
+##################################################################
+
+universe                = vanilla
+executable              = run_step3_job.sh
+
+arguments               = $(dataset) $(dataset_name) $(input_file) $(file_idx)
+
+output                  = logs/job_step3_$(dataset_name)_$(file_idx).out
+error                   = logs/job_step3_$(dataset_name)_$(file_idx).err
+log                     = logs/condor_jobs_step3.log
+
+request_cpus            = 4
+request_memory          = 8GB
+
+stream_error            = True
+stream_output           = True
+
+use_x509userproxy       = True
+x509userproxy           = /tmp/x509up_u60015
++DESIRED_SITES          = "T2_US_UCSD"
++SingularityImage       = "/cvmfs/singularity.opensciencegrid.org/cmssw/cms:rhel8"
+
+queue dataset,dataset_name,input_file,file_idx from file_lists/all_jobs.txt

@@ -25,11 +25,11 @@ echo "=================================================="
 CURRENT_DIR=$PWD
 
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-CMSSW_VERSION=CMSSW_16_0_0_pre3
+CMSSW_VERSION=CMSSW_16_0_0_pre4
 
-cd /ceph/users/aaarora/${CMSSW_VERSION}/src/
+cd /ceph/users/jchismar/${CMSSW_VERSION}/src/
 cmsenv
-
+echo "CMSSW_BASE=$CMSSW_BASE"
 cd $CURRENT_DIR
 
 WORK_DIR=$(mktemp -d)
@@ -58,7 +58,7 @@ cmsDriver.py -s L1TrackTrigger,L1 \
     --fileout "file:${OUTPUT_FILE}" \
     --python_filename "${CFG_FILE}" \
     --inputCommands="keep *, drop l1tPFJets_*_*_*, drop l1tTrackerMuons_l1tTkMuonsGmt*_*_HLT" \
-    --mc -n 100 \
+    --mc -n 5 \
     --no_exec
 
 sed -i 's/numberOfStreams = cms.untracked.uint32(0)/numberOfStreams = cms.untracked.uint32(4)/' "${CFG_FILE}"
@@ -68,13 +68,16 @@ echo ""
 echo "Running cmsRun..."
 cmsRun ${CFG_FILE} 2>&1 | tee cmsRun.log
 
-cmsDriver.py  \
+echo "Running cmsDriver.py for step2..."
+cmsDriver.py \
     step2 -s L1P2GT,HLT:75e33_trackingOnly,VALIDATION:@hltValidation \
     --conditions auto:phase2_realistic_T33 \
     --datatier DQMIO \
     --eventcontent DQMIO \
-    --procModifiers phase2CAExtension,singleIterPatatrack,trackingLST,seedingLST,trackingMkFitCommon,hltTrackingMkFitInitialStep \
+    --procModifiers phase2CAExtension,singleIterPatatrack,trackingLST,seedingLST,trackingMkFitCommon,hltTrackingMkFitInitialStep,trackingMkFitFit \
     --geometry ExtendedRun4D110 \
+    --pileup AVE_200_BX_25ns \
+    --pileup_input das:/MinBias_TuneCP5_14TeV-pythia8/Phase2Spring24GS-140X_mcRun4_realistic_v4-v1/GEN-SIM \
     --era Phase2C17I13M9 \
     --filein file:${OUTPUT_FILE} \
     --fileout file:output.root \
@@ -84,7 +87,8 @@ cmsDriver.py  \
     --outputCommands='drop *_*_*_HLT' \
     --customise Validation/RecoTrack/customiseTrackingNtuple.customiseTrackingNtupleHLT,Validation/RecoTrack/customiseTrackingNtuple.extendedContent \
     --accelerators cpu \
-    --no_exec --mc -n -1
+    --no_exec --mc -n -1 \
+    --customise_commands='process.trackingNtuple.includeTrackCandidates=False'
 
 sed -i 's/numberOfStreams = cms.untracked.uint32(0)/numberOfStreams = cms.untracked.uint32(4)/' "${HLT_CFG_FILE}"
 sed -i 's/numberOfThreads = cms.untracked.uint32(1)/numberOfThreads = cms.untracked.uint32(4)/' "${HLT_CFG_FILE}"
@@ -97,7 +101,7 @@ if [ -f "$OUTPUT_FILE" ]; then
     echo "Output file size: $(du -h $OUTPUT_FILE)"
     export GFAL_PYTHONBIN="/usr/bin/python3"
  
-    OUTPUT_DIR=root://redirector.t2.ucsd.edu:1095//store/user/aaarora/tracking/
+    OUTPUT_DIR=root://redirector.t2.ucsd.edu:1095//store/user/jachisma/tracking_addMkFitFit_test/
     gfal-copy trackingNtuple.root $OUTPUT_DIR/${HLT_OUTPUT_FILE}
     
     echo "Output copied to: $OUTPUT_DIR/${HLT_OUTPUT_FILE}"
